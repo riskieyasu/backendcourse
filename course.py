@@ -26,7 +26,7 @@ class User(db.Model):
 	name =db.Column(db.String(20), nullable=False)
 	role =db.Column(db.String(20), nullable=False)
 	passkey =db.Column(db.String(20), nullable=False)
-	courses = db.relationship('Course',secondary = tag, backref = 'user')
+	courses = db.relationship('Course',secondary = tag, backref = 'user', lazy='joined')
 	# courses_completed = db.relationship('Course',secondary = tag_completed, backref = 'user_completed')
 class Topic(db.Model):
 	id = db.Column(db.Integer, primary_key=True, index=True)
@@ -66,8 +66,8 @@ def auth(a):
 def index():
     
 	idd = auth('name')
-	namea = User.query.filter_by(name = idd).first()
-	if not namea or auth('passkey') != namea.passkey or namea.role != 'user':
+	us = User.query.filter_by(name = idd).first()
+	if not us or auth('passkey') != us.passkey or us.role != 'user':
 		return jsonify({ 
 			'error': 'Bad Request',
 			'message': 'not authenthicated'
@@ -87,14 +87,14 @@ def create_course():
 	
 	data = request.get_json()
     
-	if not 'title' in data or not 'prerequisite' in data  or not 'topic_id' in data:
+	if not 'title' in data or not 'topic_id' in data:
 		return jsonify({
 			'error': 'Bad Request',
 			'message': 'all data not given'
 		}), 400    
 	idd = auth('name')
-	namea = User.query.filter_by(name = idd).first()
-	if not namea or auth('passkey') != namea.passkey or namea.role != 'admin':
+	us = User.query.filter_by(name = idd).first()
+	if not us or auth('passkey') != us.passkey or us.role != 'teacher':
 		return jsonify({ 
 			'error': 'Bad Request',
 			'message': 'not authenthicated'
@@ -102,8 +102,6 @@ def create_course():
 		
 	u = Course(
 			title=data['title'], 
-			prerequisite=data['prerequisite'],
-			status= 'Couse_List',
             topic_id=data['topic_id']
 		)
 	db.session.add(u)
@@ -112,6 +110,60 @@ def create_course():
 		'title': u.title, 
         'topic_id': u.topic_id
 	}, 201
+
+@app.route('/prerequisite', methods=['POST'])
+def create_prerequisite():
+	
+	data = request.get_json()
+    
+	if not 'prerequisite_1' in data or not 'prerequisite_2' in data or not 'prerequisite_3 in data':
+		return jsonify({
+			'error': 'Bad Request',
+			'message': 'all data not given'
+		}), 400    
+	idd = auth('name')
+	us = User.query.filter_by(name = idd).first()
+	if not us or auth('passkey') != us.passkey or us.role != 'teacher':
+		return jsonify({ 
+			'error': 'Bad Request',
+			'message': 'not authenthicated'
+		}), 400 
+		
+	u = Prerequisite(
+			prerequisite_1=data['prerequisite_1'], 
+            prerequisite_2=data['prerequisite_2'],
+			prerequisite_3=data['prerequisite_3']
+		)
+	db.session.add(u)
+	db.session.commit()
+	return {
+		'mesage' : 'success'
+	}, 201
+
+
+@app.route('/course/<id>', methods=['PUT'])
+def update_course(id):
+	data = request.get_json()
+	
+	if not 'prerequisite' in data :
+		return {
+			'error': 'Bad Request',
+			'message': 'All parameters need to be present'
+		}, 400
+
+	idd = auth('name')
+	us = User.query.filter_by(name = idd).first()
+	if not us or auth('passkey') != us.passkey or us.role != 'teacher':
+		return jsonify({ 
+			'error': 'Bad Request',
+			'message': 'not authenthicated'
+		}), 400 
+	preq = Course.query.filter_by(id=id).first_or_404()
+	preq.prerequisite=data.get('prerequisite', Course.prerequisite)
+	db.session.commit()
+	return {
+		'message': 'success'
+		}, 201
 
 @app.route('/enroll', methods=['POST'])
 def enroll_course():
@@ -123,25 +175,35 @@ def enroll_course():
 			'error': 'Bad Request',
 			'message': 'all data not given'
 		}), 400    
+	cid = Course.query.filter_by(id= data['id']) .first()
+	title = Course.query.filter_by(title = data['title']) .first()
+		
+	if not cid or not title or cid.id != title.id:
+		return jsonify({
+			'error': 'Bad Request',
+			'message': 'no course found'
+		}), 400		
 	idd = auth('name')
-	namea = User.query.filter_by(name = idd).first()
-	if not namea or auth('passkey') != namea.passkey or namea.role != 'user':
+	us = User.query.filter_by(name = idd).first()
+	if not us or auth('passkey') != us.passkey or us.role != 'user':
 		return jsonify({ 
 			'error': 'Bad Request',
 			'message': 'not authenthicated'
 		}), 400 
-	nameaa = Course.query.filter_by(title = data['title']).first()	
-	u = Course(
-			title=data['title'], 
-			prerequisite=nameaa.prerequisite,
-			status= 'Enrolled',
-            topic_id=nameaa.topic_id
-		)
+	course = Course.query.filter_by(id = data['id']).first()
+	pre = Prerequisite.query.filter_by(id = course.prerequisite).first()
+	us_cou_1 = User.query.join(tag).join(Course).filter((tag.c.user_id == us.id) & (tag.c.course_id == pre.prerequisite_1) & (tag.c.status == 'Completed')).first()
+	# us_cou_2 = User.query.join(tag).join(Course).filter((tag.c.user_id == us.id) & (tag.c.course_id == pre.prerequisite_2) & (tag.c.status == 'Completed')).first()
+	# us_cou_3 = User.query.join(tag).join(Course).filter((tag.c.user_id == us.id) & (tag.c.course_id == pre.prerequisite_3) & (tag.c.status == 'Completed')).first()
 	
-	db.session.add(u)
-	descending = Course.query.order_by(Course.id.desc())
-	last_item = descending.first()
-	credentials = tag.insert().values(course_id=last_item.id, user_id=namea.id)
+
+	if not us_cou_1 and pre.prerequisite_1 != None:
+			return jsonify({ 
+			'error': 'Bad Request',
+			'message': 'not meet minimum requirements'
+		}), 400 
+
+	credentials = tag.insert().values(course_id=data['id'], user_id=us.id, status = 'Enrolled')
 	db.session.execute(credentials)
 	db.session.commit()
 	return 'Enrolled', 201
