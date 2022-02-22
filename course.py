@@ -16,7 +16,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_DATABASE_URI']='postgresql://postgres:Raikonen04@localhost:5432/course?sslmode=disable' #app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://DB_USER:PASSWORD@HOST/DATABASE'
 db = SQLAlchemy(app)
 
-class User(db.Model):
+class Users(db.Model):
 	id = db.Column(db.Integer, primary_key=True, index=True)
 	name =db.Column(db.String(20), nullable=False)
 	role =db.Column(db.String(20), nullable=False)
@@ -75,7 +75,7 @@ def auth(a):
 def index():
     
 	idd = auth('name')
-	us = User.query.filter_by(name = idd).first()
+	us = Users.query.filter_by(name = idd).first()
 	if not us or auth('passkey') != us.passkey or us.role != 'user':
 		return jsonify({ 
 			'error': 'Bad Request',
@@ -102,7 +102,7 @@ def create_course():
 			'message': 'all data not given'
 		}), 400    
 	idd = auth('name')
-	us = User.query.filter_by(name = idd).first()
+	us = Users.query.filter_by(name = idd).first()
 	if not us or auth('passkey') != us.passkey or us.role != 'teacher':
 		return jsonify({ 
 			'error': 'Bad Request',
@@ -131,7 +131,7 @@ def create_prerequisite():
 			'message': 'all data not given'
 		}), 400    
 	idd = auth('name')
-	us = User.query.filter_by(name = idd).first()
+	us = Users.query.filter_by(name = idd).first()
 	if not us or auth('passkey') != us.passkey or us.role != 'teacher':
 		return jsonify({ 
 			'error': 'Bad Request',
@@ -154,21 +154,24 @@ def create_prerequisite():
 def update_course(id):
 	data = request.get_json()
 	
-	if not 'prerequisite' in data :
+	if not 'prerequisite' in data and not 'title' in data :
 		return {
 			'error': 'Bad Request',
 			'message': 'All parameters need to be present'
 		}, 400
 
 	idd = auth('name')
-	us = User.query.filter_by(name = idd).first()
+	us = Users.query.filter_by(name = idd).first()
 	if not us or auth('passkey') != us.passkey or us.role != 'teacher':
 		return jsonify({ 
 			'error': 'Bad Request',
 			'message': 'not authenthicated'
 		}), 400 
 	preq = Course.query.filter_by(id=id).first_or_404()
-	preq.prerequisite=data.get('prerequisite', Course.prerequisite)
+	if not 'title' in data:
+		preq.prerequisite=data.get('prerequisite', Course.prerequisite)
+	if not 'prequisite' in data:
+		preq.title=data.get('title', Course.title)
 	db.session.commit()
 	return {
 		'message': 'success'
@@ -193,7 +196,7 @@ def enroll_course():
 			'message': 'no course found'
 		}), 400		
 	idd = auth('name')
-	us = User.query.filter_by(name = idd).first()
+	us = Users.query.filter_by(name = idd).first()
 	if not us or auth('passkey') != us.passkey or us.role != 'user':
 		return jsonify({ 
 			'error': 'Bad Request',
@@ -201,7 +204,7 @@ def enroll_course():
 		}), 400 
 	course = Course.query.filter_by(id = data['id']).first()
 	pre = Prerequisite.query.filter_by(id = course.prerequisite).first()
-	us_cou = Coursedata.query.filter_by(user_id = us.id).count()
+	us_cou = Coursedata.query.filter((Coursedata.user_id == us.id) & (Coursedata.status_id == 1)).count()
 	us_cou_1 = Coursedata.query.filter((Coursedata.user_id == us.id) & (Coursedata.course_id == pre.prerequisite_1) & (Coursedata.status_id == 2)).first()
 	us_cou_2 = Coursedata.query.filter((Coursedata.user_id == us.id) & (Coursedata.course_id == pre.prerequisite_2) & (Coursedata.status_id == 2)).first()
 	# us_cou_3 = User.query.join(tag).join(Course).filter((tag.c.user_id == us.id) & (tag.c.course_id == pre.prerequisite_3) & (tag.c.status == 'Completed')).first()
@@ -230,7 +233,7 @@ def enroll_course():
 @app.route('/course/<id>')
 def get_courseid(id):
 	idd = auth('name')
-	us = User.query.filter_by(name = idd).first()
+	us = Users.query.filter_by(name = idd).first()
 	if not us or auth('passkey') != us.passkey or us.role != 'teacher':
 		return jsonify({ 
 			'error': 'Bad Request',
@@ -255,14 +258,14 @@ def get_courseid(id):
 @app.route('/courses')
 def get_course():
 	idd = auth('name')
-	us = User.query.filter_by(name = idd).first()
+	us = Users.query.filter_by(name = idd).first()
 	if not us or auth('passkey') != us.passkey or us.role != 'user':
 		return jsonify({ 
 			'error': 'Bad Request',
 			'message': 'not authenthicated'
 		}), 400 
 	print(id)
-	courses = User.query.filter_by(id=us.id).first_or_404()
+	courses = Users.query.filter_by(id=us.id).first_or_404()
 	# courses = User.query.join(tag).join(Course).filter((tag.c.user_id == us.id)).first()
 	# status = Status.query.join(tag).join(User).all()
 	
@@ -288,11 +291,22 @@ def get_coursesbytopic():
 		{
 			'1_name':cours.name, 
 			'2_courses': [{
+					 'id' : member.id,
 		   			 'nama': member.title,
 					 'prerequisite_id' : member.prerequisite
 			} for member in cours.course 
 			]
 			} for cours in topic
+	])
+
+@app.route('/topiclist')
+def get_topic():
+	
+	topic = Topic.query.all()
+	return jsonify([
+		{
+			'topic_name':a.name, 
+		}for a in topic
 	])
 @app.route('/prerequisite/<id>')
 def get_prerequisite(id):
@@ -325,19 +339,38 @@ def get_prerequisite(id):
 		'prerequisite_2' : cou2.title,
 		'prerequisite_3' : cou3.title,
 		}
-	
-@app.route('/pass/<id>', methods=['PUT'])
+
+@app.route('/cancel/<id>', methods=['PUT'])
 def pass_course(id):
 	
 	print(id)
 	idd = auth('name')
-	us = User.query.filter_by(name = idd).first()
+	us = Users.query.filter_by(name = idd).first()
 	if not us or auth('passkey') != us.passkey or us.role != 'user':
 		return jsonify({ 
 			'error': 'Bad Request',
 			'message': 'not authenthicated'
 		}), 400 
-	coursedata = Coursedata.query.filter_by(course_id=id).first_or_404()
+		
+	coursedata = Coursedata.query.filter((Coursedata.course_id==id) & (Coursedata.user_id==us.id)).first_or_404()
+	db.session.delete(coursedata)
+	db.session.commit()
+	return {
+		'message': 'success'
+		}, 201
+
+@app.route('/pass/<id>', methods=['PUT'])
+def pass_c(id):
+	
+	print(id)
+	idd = auth('name')
+	us = Users.query.filter_by(name = idd).first()
+	if not us or auth('passkey') != us.passkey or us.role != 'user':
+		return jsonify({ 
+			'error': 'Bad Request',
+			'message': 'not authenthicated'
+		}), 400 
+	coursedata = Coursedata.query.filter((Coursedata.course_id==id) & (Coursedata.user_id==us.id)).first_or_404()
 	coursedata.status_id=2
 	db.session.commit()
 	return {
@@ -352,7 +385,7 @@ def create_user():
 			'error': 'Bad Request',
 			'message': 'all data not given'
 		}), 400
-	u = User(
+	u = Users(
 			name=data['name'],
 			role = data['role'],
 			passkey=data['passkey'],
@@ -371,7 +404,7 @@ def daftar():
 			'error': 'Bad Request',
 			'message': 'all data not given'
 		}), 400
-	u = User(
+	u = Users(
 			name=data['name'],
 			role = data['role'],
 			passkey=data['passkey'],
@@ -392,7 +425,7 @@ def updateuser():
 			'message': 'all data not given'
 		}), 400
 	idd = auth('name')
-	us = User.query.filter_by(name = idd).first()
+	us = Users.query.filter_by(name = idd).first()
 	us.name = data['name']
 	us.role = data['role']
 	us.passkey = data['passkey']
@@ -400,3 +433,25 @@ def updateuser():
 	return {
 		'success': 'yes', 
 	}, 201
+
+@app.route('/topcourse')
+def get_topcourse():
+	
+	a = db.engine.execute("select course.title, count(course.title) as frequency from coursedata join course on coursedata.course_id = course.id group by course.title order by frequency desc limit 5")
+	b = []
+	c = 0
+	for i in a:
+		c = c +1
+		b.append({'1_Rank' : c,'2_course_name' : i[0],'3_students': i[1]})
+	return jsonify(b)
+
+@app.route('/topstudent')
+def get_topstudent():
+	
+	a = db.engine.execute("select u.name, count(u.name) as frequency from coursedata join users u on coursedata.user_id = u.id where status_id = 2 group by u.name order by frequency desc limit 5")
+	b = []
+	c = 0
+	for i in a:
+		c = c +1
+		b.append({'1_Rank' : c,'2_student_name' : i[0],'3_courses_completed': i[1]})
+	return jsonify(b)
