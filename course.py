@@ -373,7 +373,7 @@ def get_prerequisite(id):
 		'prerequisite_3' : cou3.title,
 		}
 
-@app.route('/cancel/<id>', methods=['PUT'])
+@app.route('/cancel/<id>', methods=['DELETE'])
 def pass_course(id):
 	
 	print(id)
