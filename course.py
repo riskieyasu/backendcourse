@@ -33,6 +33,7 @@ class Course(db.Model):
 	title =db.Column(db.String(50), nullable=False)
 	prerequisite = db.Column(db.Integer, db.ForeignKey('prerequisite.id'), nullable=True)
 	topic_id=db.Column(db.Integer, db.ForeignKey('topic.id'), nullable=False)
+	description =db.Column(db.String(50), nullable=True)
 	students = db.relationship('Coursedata', backref='ownere', lazy='dynamic')
 	
 class Prerequisite(db.Model):
@@ -48,7 +49,7 @@ class Status(db.Model):
 class Coursedata(db.Model):
 	id = db.Column(db.Integer, primary_key=True, index=True)
 	course_id = db.Column(db.Integer, db.ForeignKey('course.id'), nullable=True)
-	user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+	user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 	status_id = db.Column(db.Integer, db.ForeignKey('status.id'), nullable=True)
 
 
@@ -96,7 +97,7 @@ def create_course():
 	
 	data = request.get_json()
     
-	if not 'title' in data or not 'topic_id' in data:
+	if not 'title' in data or not 'topic_id' in data or not 'description' in data:
 		return jsonify({
 			'error': 'Bad Request',
 			'message': 'all data not given'
@@ -111,7 +112,8 @@ def create_course():
 		
 	u = Course(
 			title=data['title'], 
-            topic_id=data['topic_id']
+            topic_id=data['topic_id'],
+			description = data['description']
 		)
 	db.session.add(u)
 	db.session.commit()
@@ -154,10 +156,10 @@ def create_prerequisite():
 def update_course(id):
 	data = request.get_json()
 	
-	if not 'prerequisite' in data and not 'title' in data :
+	if not 'prerequisite' in data and not 'title' in data  and not 'description' in data:
 		return {
 			'error': 'Bad Request',
-			'message': 'All parameters need to be present'
+			'message': 'a parameters need to be present'
 		}, 400
 
 	idd = auth('name')
@@ -167,11 +169,14 @@ def update_course(id):
 			'error': 'Bad Request',
 			'message': 'not authenthicated'
 		}), 400 
-	preq = Course.query.filter_by(id=id).first_or_404()
-	if not 'title' in data:
-		preq.prerequisite=data.get('prerequisite', Course.prerequisite)
-	if not 'prequisite' in data:
-		preq.title=data.get('title', Course.title)
+	s = Course.query.filter_by(id=id).first_or_404()
+	if 'prerequisite' in data:
+		s.prerequisite=data.get('prerequisite', Course.prerequisite)
+	if 'title' in data:
+		s.title=data.get('title', Course.title)
+	if 'description' in data:
+		s.description=data.get('description', Course.description)
+
 	db.session.commit()
 	return {
 		'message': 'success'
@@ -278,26 +283,54 @@ def get_course():
 			]
 		}
 
-@app.route('/coursesbytopic')
+@app.route('/searchcourse')
 def get_coursesbytopic():
 	data = request.get_json()
-	if not 'topic' in data:
+	if not 'topic' in data and not 'name' in data and not 'description' in data:
 		return jsonify({ 
 			'error': 'Bad Request',
 			'message': 'parameter not inserted'
 		}), 400 
-	topic = Topic.query.filter_by(name=data['topic']).all()
-	return jsonify([
+	# topic = Topic.query.filter_by(name=data['topic']).all()
+	if 'topic' in data:
+		topic = Topic.query.filter(Topic.name.like('%' + data['topic'] + '%'))
+		a = jsonify([
 		{
 			'1_name':cours.name, 
 			'2_courses': [{
-					 'id' : member.id,
-		   			 'nama': member.title,
-					 'prerequisite_id' : member.prerequisite
+					 '1_id' : member.id,
+		   			 '2_nama': member.title,
+					 '3_prerequisite_id' : member.prerequisite,
+					 '4_description' : member.description
 			} for member in cours.course 
 			]
 			} for cours in topic
-	])
+	     ])
+		return a
+
+	if 'name' in data :
+		course = Course.query.filter(Course.title.like('%' + data['name'] + '%'))
+		b = jsonify([
+		{
+			'1_name':cours.title, 
+			'2_prerequisite_id' : cours.prerequisite,
+			'3_description' : cours.description
+			} for cours in course
+		])
+		return b
+	
+	if 'description' in data :
+		course = Course.query.filter(Course.title.like('%' + data['description'] + '%'))
+		c = jsonify([
+		{
+			'1_name':cours.title, 
+			'2_prerequisite_id' : cours.prerequisite,
+			'3_description' :cours.description
+			} for cours in course
+		])
+		return c
+
+	
 
 @app.route('/topiclist')
 def get_topic():
