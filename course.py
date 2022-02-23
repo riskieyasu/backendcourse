@@ -187,15 +187,15 @@ def enroll_course():
 	
 	data = request.get_json()
     
-	if not 'id' in data or not 'title' in data:
+	if not 'title' in data:
 		return jsonify({
 			'error': 'Bad Request',
 			'message': 'all data not given'
 		}), 400    
-	cid = Course.query.filter_by(id= data['id']) .first()
+	
 	title = Course.query.filter_by(title = data['title']) .first()
 		
-	if not cid or not title or cid.id != title.id:
+	if not title:
 		return jsonify({
 			'error': 'Bad Request',
 			'message': 'no course found'
@@ -207,7 +207,7 @@ def enroll_course():
 			'error': 'Bad Request',
 			'message': 'not authenthicated'
 		}), 400 
-	course = Course.query.filter_by(id = data['id']).first()
+	course = Course.query.filter_by(title = data['title']).first()
 	pre = Prerequisite.query.filter_by(id = course.prerequisite).first()
 	us_cou = Coursedata.query.filter((Coursedata.user_id == us.id) & (Coursedata.status_id == 1)).count()
 	us_cou_1 = Coursedata.query.filter((Coursedata.user_id == us.id) & (Coursedata.course_id == pre.prerequisite_1) & (Coursedata.status_id == 2)).first()
@@ -227,7 +227,7 @@ def enroll_course():
 			'message': 'not meet minimum requirements'
 		}), 400 
 	coursedata = Coursedata(
-		course_id=data['id'], user_id=us.id,
+		course_id=course.id, user_id=us.id,
 		status_id=1
 	)
 	
@@ -277,6 +277,7 @@ def get_course():
 	return {
 		'1_student_name': courses.name, 
 		'2_courses': [{
+				'course_id'    : cours.ownere.id,
 				'course_title' : cours.ownere.title,
 				'status' : cours.owneru.status,
 			 } for cours in courses.courses
@@ -320,13 +321,13 @@ def get_coursesbytopic():
 		return b
 	
 	if 'description' in data :
-		course = Course.query.filter(Course.title.like('%' + data['description'] + '%'))
+		coursea = Course.query.filter(Course.description.like('%' + data['description'] + '%'))
 		c = jsonify([
 		{
 			'1_name':cours.title, 
 			'2_prerequisite_id' : cours.prerequisite,
 			'3_description' :cours.description
-			} for cours in course
+			} for cours in coursea
 		])
 		return c
 
