@@ -22,7 +22,7 @@ class Users(db.Model):
 	role =db.Column(db.String(20), nullable=False)
 	passkey =db.Column(db.String(20), nullable=False)
 	courses = db.relationship('Coursedata', backref='owner', lazy='dynamic')
-	# courses_completed = db.relationship('Course',secondary = tag_completed, backref = 'user_completed')
+
 class Topic(db.Model):
 	id = db.Column(db.Integer, primary_key=True, index=True)
 	name =db.Column(db.String(50), nullable=False)
@@ -35,17 +35,11 @@ class Course(db.Model):
 	description =db.Column(db.String(50), nullable=True)
 	students = db.relationship('Coursedata', backref='ownere', lazy='dynamic')
 	
-
-	
-	
 class Prerequisite(db.Model):
 	id = db.Column(db.Integer, primary_key=True, index=True)
 	course_id=db.Column(db.Integer, db.ForeignKey('course.id'), nullable=True)
 	preq_course_id=db.Column(db.Integer, db.ForeignKey('course.id'), nullable=True)
-	
-	# preq = db.relationship('Course', backref='ownerz', lazy='dynamic')
-	
-	
+		
 class Status(db.Model):
 	id = db.Column(db.Integer, primary_key=True, index=True)
 	status = db.Column('status',db.String(20), nullable=False)
@@ -90,12 +84,7 @@ def index():
 	
 	return 'WELCOME', 201
 
-# @app.route('/count')
-# def count():
-    
-# 	namea = User.query.filter_by(name = 'Riski').count()	
-	
-# 	return str(namea), 201
+
 @app.route('/course', methods=['POST'])
 def create_course():
 	
@@ -133,8 +122,6 @@ def create_course():
 	return {
 		'message' : 'success'
 	}, 201
-
-
 
 @app.route('/course/<id>', methods=['PUT'])
 def update_course(id):
@@ -199,8 +186,7 @@ def enroll_course():
 	us_cou = Coursedata.query.filter((Coursedata.user_id == us.id) & (Coursedata.status_id == 1)).count()
 	for i in range(len(pre)):
 		us_cou_1 = Coursedata.query.filter((Coursedata.user_id == us.id) & (Coursedata.course_id == pre[i].preq_course_id) & (Coursedata.status_id == 2)).all()
-	# us_cou_2 = Coursedata.query.filter((Coursedata.user_id == us.id) & (Coursedata.course_id == pre.prerequisite_2) & (Coursedata.status_id == 2)).first()
-	# us_cou_3 = User.query.join(tag).join(Course).filter((tag.c.user_id == us.id) & (tag.c.course_id == pre.prerequisite_3) & (tag.c.status == 'Completed')).first()
+	
 	if a:
 		return jsonify({ 
 			'error': 'Bad Request',
@@ -238,16 +224,13 @@ def get_courseid(id):
 		}), 400 
 	print(id)
 	course = Course.query.filter_by(id=id).first_or_404()
-	# course = Course.query.join(tag).join(User).filter((tag.c.course_id == id)).first()
-	# status = Status.query.join(tag).join(User).all()
-	
+
 	return {
 		'1_title': course.title, 
 		'2_students': [{
 				'student_id' : student.id,
 		        'name': student.owner.name, 
 				'status' : student.owneru.status
-				# 'status' : student.status,
 			 } for student in course.students 
 			]
 		}
@@ -263,8 +246,7 @@ def get_course():
 		}), 400 
 	print(id)
 	courses = Users.query.filter_by(id=us.id).first_or_404()
-	# courses = User.query.join(tag).join(Course).filter((tag.c.user_id == us.id)).first()
-	# status = Status.query.join(tag).join(User).all()
+
 	
 	return {
 		'1_student_name': courses.name, 
@@ -284,7 +266,7 @@ def get_coursesbytopic():
 			'error': 'Bad Request',
 			'message': 'parameter not inserted'
 		}), 400 
-	# topic = Topic.query.filter_by(name=data['topic']).all()
+	
 	if 'topic' in data:
 		topic = Topic.query.filter(Topic.name.ilike('%' + data['topic'] + '%'))
 		a = jsonify([
@@ -320,17 +302,21 @@ def get_coursesbytopic():
 		])
 		return c
 
-	
-
 @app.route('/topiclist')
 def get_topic():
 	
 	topic = Topic.query.all()
+	y =[]
+	for a in topic :
+		x = a.course.count()
+		z = a.name
+		y.append({'name':z, 'total_courses': x}) 
 	return jsonify([
-		{
-			'topic_name':a.name, 
-		}for a in topic
+		{    
+			'Topic':y[j], 
+		}for j in range (len(y))
 	])
+
 @app.route('/prerequisite/<id>')
 def get_prerequisite(id):
 	print(id)
