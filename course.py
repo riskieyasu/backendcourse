@@ -31,16 +31,20 @@ class Topic(db.Model):
 class Course(db.Model):
 	id = db.Column(db.Integer, primary_key=True, index=True)
 	title =db.Column(db.String(50), nullable=False)
-	prerequisite = db.Column(db.Integer, db.ForeignKey('prerequisite.id'), nullable=True)
 	topic_id=db.Column(db.Integer, db.ForeignKey('topic.id'), nullable=False)
 	description =db.Column(db.String(50), nullable=True)
 	students = db.relationship('Coursedata', backref='ownere', lazy='dynamic')
 	
+
+	
+	
 class Prerequisite(db.Model):
 	id = db.Column(db.Integer, primary_key=True, index=True)
-	prerequisite_1=db.Column(db.Integer, db.ForeignKey('course.id'), nullable=True)
-	prerequisite_2=db.Column(db.Integer, db.ForeignKey('course.id'), nullable=True)
-	prerequisite_3=db.Column(db.Integer, db.ForeignKey('course.id'), nullable=True)
+	course_id=db.Column(db.Integer, db.ForeignKey('course.id'), nullable=True)
+	preq_course_id=db.Column(db.Integer, db.ForeignKey('course.id'), nullable=True)
+	
+	# preq = db.relationship('Course', backref='ownerz', lazy='dynamic')
+	
 	
 class Status(db.Model):
 	id = db.Column(db.Integer, primary_key=True, index=True)
@@ -116,40 +120,20 @@ def create_course():
 			description = data['description']
 		)
 	db.session.add(u)
+	usa = Course.query.filter_by(title = data['title']).first()
+	for i in data['prerequisite']:
+		psa = Course.query.filter_by(title = i).first()
+		if 'prerequisite' in data:
+			u = Prerequisite(
+			course_id=usa.id, 
+            preq_course_id=psa.id,
+			)
+		db.session.add(u)
 	db.session.commit()
 	return {
-		'title': u.title, 
-        'topic_id': u.topic_id
+		'message' : 'success'
 	}, 201
 
-@app.route('/prerequisite', methods=['POST'])
-def create_prerequisite():
-	
-	data = request.get_json()
-    
-	if not 'prerequisite_1' in data or not 'prerequisite_2' in data or not 'prerequisite_3 in data':
-		return jsonify({
-			'error': 'Bad Request',
-			'message': 'all data not given'
-		}), 400    
-	idd = auth('name')
-	us = Users.query.filter_by(name = idd).first()
-	if not us or auth('passkey') != us.passkey or us.role != 'teacher':
-		return jsonify({ 
-			'error': 'Bad Request',
-			'message': 'not authenthicated'
-		}), 400 
-		
-	u = Prerequisite(
-			prerequisite_1=data['prerequisite_1'], 
-            prerequisite_2=data['prerequisite_2'],
-			prerequisite_3=data['prerequisite_3']
-		)
-	db.session.add(u)
-	db.session.commit()
-	return {
-		'mesage' : 'success'
-	}, 201
 
 
 @app.route('/course/<id>', methods=['PUT'])
@@ -207,13 +191,21 @@ def enroll_course():
 			'error': 'Bad Request',
 			'message': 'not authenthicated'
 		}), 400 
-	course = Course.query.filter_by(title = data['title']).first()
-	pre = Prerequisite.query.filter_by(id = course.prerequisite).first()
-	us_cou = Coursedata.query.filter((Coursedata.user_id == us.id) & (Coursedata.status_id == 1)).count()
-	us_cou_1 = Coursedata.query.filter((Coursedata.user_id == us.id) & (Coursedata.course_id == pre.prerequisite_1) & (Coursedata.status_id == 2)).first()
-	us_cou_2 = Coursedata.query.filter((Coursedata.user_id == us.id) & (Coursedata.course_id == pre.prerequisite_2) & (Coursedata.status_id == 2)).first()
-	# us_cou_3 = User.query.join(tag).join(Course).filter((tag.c.user_id == us.id) & (tag.c.course_id == pre.prerequisite_3) & (tag.c.status == 'Completed')).first()
 	
+	course = Course.query.filter_by(title = data['title']).first()
+	a = Coursedata.query.filter((Coursedata.user_id==us.id) & (Coursedata.course_id==course.id)).first()
+	preq = Prerequisite.query.filter_by(course_id = course.id).count()
+	pre = Prerequisite.query.filter_by(course_id = course.id).all()
+	us_cou = Coursedata.query.filter((Coursedata.user_id == us.id) & (Coursedata.status_id == 1)).count()
+	for i in range(len(pre)):
+		us_cou_1 = Coursedata.query.filter((Coursedata.user_id == us.id) & (Coursedata.course_id == pre[i].preq_course_id) & (Coursedata.status_id == 2)).all()
+	# us_cou_2 = Coursedata.query.filter((Coursedata.user_id == us.id) & (Coursedata.course_id == pre.prerequisite_2) & (Coursedata.status_id == 2)).first()
+	# us_cou_3 = User.query.join(tag).join(Course).filter((tag.c.user_id == us.id) & (tag.c.course_id == pre.prerequisite_3) & (tag.c.status == 'Completed')).first()
+	if a:
+		return jsonify({ 
+			'error': 'Bad Request',
+			'message': 'already enrolled'
+		}), 400 
 	if us_cou == 5 :
 		return jsonify({ 
 			'error': 'Bad Request',
@@ -221,7 +213,7 @@ def enroll_course():
 		}), 400 
 
 
-	if (not us_cou_1 and pre.prerequisite_1 != None) or (not us_cou_2 and pre.prerequisite_2 != None):
+	if not us_cou_1 and preq != 0 :
 			return jsonify({ 
 			'error': 'Bad Request',
 			'message': 'not meet minimum requirements'
@@ -294,15 +286,14 @@ def get_coursesbytopic():
 		}), 400 
 	# topic = Topic.query.filter_by(name=data['topic']).all()
 	if 'topic' in data:
-		topic = Topic.query.filter(Topic.name.like('%' + data['topic'] + '%'))
+		topic = Topic.query.filter(Topic.name.ilike('%' + data['topic'] + '%'))
 		a = jsonify([
 		{
 			'1_name':cours.name, 
 			'2_courses': [{
 					 '1_id' : member.id,
 		   			 '2_nama': member.title,
-					 '3_prerequisite_id' : member.prerequisite,
-					 '4_description' : member.description
+					 '3_description' : member.description
 			} for member in cours.course 
 			]
 			} for cours in topic
@@ -310,23 +301,21 @@ def get_coursesbytopic():
 		return a
 
 	if 'name' in data :
-		course = Course.query.filter(Course.title.like('%' + data['name'] + '%'))
+		course = Course.query.filter(Course.title.ilike('%' + data['name'] + '%'))
 		b = jsonify([
 		{
 			'1_name':cours.title, 
-			'2_prerequisite_id' : cours.prerequisite,
-			'3_description' : cours.description
+			'2_description' : cours.description
 			} for cours in course
 		])
 		return b
 	
 	if 'description' in data :
-		coursea = Course.query.filter(Course.description.like('%' + data['description'] + '%'))
+		coursea = Course.query.filter(Course.description.ilike('%' + data['description'] + '%'))
 		c = jsonify([
 		{
 			'1_name':cours.title, 
-			'2_prerequisite_id' : cours.prerequisite,
-			'3_description' :cours.description
+			'2_description' :cours.description
 			} for cours in coursea
 		])
 		return c
@@ -345,34 +334,23 @@ def get_topic():
 @app.route('/prerequisite/<id>')
 def get_prerequisite(id):
 	print(id)
-	us_cou_1 = Course.query.filter(Course.prerequisite == id).first()
-	pre = Prerequisite.query.filter_by(id=us_cou_1.prerequisite).first()
-	cou1 = Course.query.filter_by(id = pre.prerequisite_1).first()
-	cou2 = Course.query.filter_by(id = pre.prerequisite_2).first()
-	cou3 = Course.query.filter_by(id = pre.prerequisite_3).first()
-	cou11 = Course.query.filter_by(id = pre.prerequisite_1).count()
-	cou22 = Course.query.filter_by(id = pre.prerequisite_2).count()
-	cou33 = Course.query.filter_by(id = pre.prerequisite_3).count()
-	
-	if cou11 == 0 and cou22 == 0 and cou33 == 0:
-		return {
-			'message': 'none'
-		}
-	if cou22 == 0 and cou33 == 0:
-		return {
-			'prerequisite_1': cou1.title
-		}
-	if cou33 == 0 :
-		return {
-		'prerequisite_1': cou1.title, 
-		'prerequisite_2' : cou2.title,
-		}
-	else :
-		return {
-		'prerequisite_1': cou1.title, 
-		'prerequisite_2' : cou2.title,
-		'prerequisite_3' : cou3.title,
-		}
+	us_cou_1 = Prerequisite.query.filter_by(course_id = id).all()
+	course = Course.query.filter_by(id= id).all()
+	a = []
+	for i in range(len(us_cou_1)):
+		pre = Course.query.filter_by(id=us_cou_1[i].preq_course_id).first()
+		a.append(pre)
+	c = jsonify([
+		{
+		'1_name':cours.title, 
+		'2_prerequisites': [{
+			'1_course_name':a[j].title, 
+			'2_course_description': a[j].description
+			} for j in range(len(a))
+			]
+		} for cours in course
+		 ])
+	return c
 
 @app.route('/cancel/<id>', methods=['DELETE'])
 def pass_course(id):
